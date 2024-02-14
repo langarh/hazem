@@ -1,0 +1,74 @@
+variables:
+  KUBE_CONTEXT: root/hazem:agent-langar  
+ 
+stages:
+  - compile
+  - build
+  - deploy
+  
+compile:
+  stage: compile
+  image: maven:3.8.3-openjdk-11
+  script:
+    - export GIT_SSL_NO_VERIFY=1 
+    - mvn clean package -Dmaven.test.skip=true
+  artifacts:
+    paths:
+     - target/*.jar
+  only:
+   - master
+
+build: 
+  image: docker:latest
+  variables:
+   #DOCKER_DRIVER: overlay2
+   DOCKER_HOST: tcp://192.168.241.178:2375/
+   DOCKER_TLS_CERTDIR: ""
+   #DOCKER_TLS_CERTDIR: "/home/hazem/ssl3/"
+   #DOCKER_BUILDKIT: 1 
+   #DOCKER_NETWORK: "host"
+   #DOCKER_OPTS: "--insecure-registry=registry.vipin.com" 
+
+  services:
+    - docker:dind
+      #entrypoint: ["dockerd-entrypoint.sh"]
+      #command: ['--insecure-registry=registry.vipin.com']
+    #- network="host"
+
+  stage: build
+  before_script:
+    #- echo "$REGISTRY_CA_CERT" | base64 -d > /usr/local/share/ca-certificates/registry.vipin.com.crt
+    #- update-ca-certificates
+    #- echo "langarbrahim" | docker login registry.vipin.com -u root --password-stdin --insecure 
+    #- cp $ca  /etc/docker/certs.d/registry.vipin.com/
+    #- mkdir -p /etc/docker/certs.d/registry.vipin.com
+    #- cp $CARTIF /etc/docker/certs.d/registry.vipin.com/ca.crt
+    #- echo "$ca" >> /etc/docker/certs.d/registry.vipin.com
+    #- cd /etc/docker/certs.d/registry.vipin.com/
+    #- service docker reload
+    - docker login registry.vipin.com -u root -p  langarbrahim  #--insecure-skip-tls-verify=true#--tls-verify=false
+    #- docker --insecure-registry registry.vipin.com login -u root -p  langarbrahim
+    #- echo "langarbrahim" | docker login -u root --password-stdin registry.vipin.com
+  script:
+    - docker build -t registry.vipin.com/root/hazem . 
+    - docker images
+    - docker push registry.vipin.com/root/hazem  
+  only:
+    - master
+
+deploy:
+  stage: deploy 
+  allow_failure: true
+  image:
+    name: bitnami/kubectl:latest
+    entrypoint: ['']
+  script:
+    - kubectl config get-contexts
+    - kubectl config use-context $KUBE_CONTEXT
+    - kubectl config view
+    - ls $CI_PROJECT_DIR/k8s-files
+    - kubectl apply -f $CI_PROJECT_DIR/k8s-files/  --insecure-skip-tls-verify=true 
+    - kubectl get pods -A  --insecure-skip-tls-verify=true   
+    #- kubectl get nodes 
+  #only:
+   # - master       
